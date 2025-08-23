@@ -1,0 +1,63 @@
+name: Sync mypkgs (flat root)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 */3 * *'  # 每3天 00:00 UTC，可改
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set git identity
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      # ---------- msd_lite (from immortalwrt/packages) ----------
+      - name: Fetch msd_lite
+        run: |
+          rm -rf temp-pkgs
+          git clone --depth=1 https://github.com/immortalwrt/packages.git temp-pkgs
+          # 把子目录直接移动到仓库根（扁平结构）
+          rm -rf msd_lite
+          rsync -a --delete temp-pkgs/net/msd_lite/ msd_lite/
+          rm -rf temp-pkgs
+
+      # ---------- luci-app-msd_lite (from immortalwrt/luci) ----------
+      - name: Fetch luci-app-msd_lite
+        run: |
+          rm -rf temp-luci
+          git clone --depth=1 https://github.com/immortalwrt/luci.git temp-luci
+          rm -rf luci-app-msd_lite
+          rsync -a --delete temp-luci/applications/luci-app-msd_lite/ luci-app-msd_lite/
+          rm -rf temp-luci
+
+      # ---------- wrtbwmon & luci-app-wrtbwmon (from kenzok8/small-package) ----------
+      - name: Fetch wrtbwmon & luci-app-wrtbwmon
+        run: |
+          rm -rf temp-smpackage
+          git clone --depth=1 https://github.com/kenzok8/small-package.git temp-smpackage
+          rm -rf wrtbwmon luci-app-wrtbwmon
+          rsync -a --delete temp-smpackage/wrtbwmon/           wrtbwmon/
+          rsync -a --delete temp-smpackage/luci-app-wrtbwmon/ luci-app-wrtbwmon/
+          rm -rf temp-smpackage
+
+      # ---------- Commit & Push ----------
+      - name: Commit & push changes
+        run: |
+          git add msd_lite luci-app-msd_lite wrtbwmon luci-app-wrtbwmon || true
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Sync mypkgs: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
