@@ -1,4 +1,4 @@
-name: Sync mypkgs (flat root)
+name: Sync mypkgs
 
 on:
   workflow_dispatch:
@@ -27,7 +27,6 @@ jobs:
         run: |
           rm -rf temp-pkgs
           git clone --depth=1 https://github.com/immortalwrt/packages.git temp-pkgs
-          # 把子目录直接移动到仓库根（扁平结构）
           rm -rf msd_lite
           rsync -a --delete temp-pkgs/net/msd_lite/ msd_lite/
           rm -rf temp-pkgs
