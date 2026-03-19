@@ -3,7 +3,7 @@ name: Sync mypkgs
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 */3 * *'  # 每3天 00:00 UTC，可改
+    - cron: '0 0 */5 * *'  # 每5天 00:00 UTC执行
 
 permissions:
   contents: write
@@ -40,15 +40,15 @@ jobs:
           rsync -a --delete temp-luci/applications/luci-app-msd_lite/ luci-app-msd_lite/
           rm -rf temp-luci
 
-      # ---------- wrtbwmon & luci-app-wrtbwmon (from kenzok8/small-package) ----------
+      # ---------- wrtbwmon & luci-app-wrtbwmon (from kenzok8/jell) ----------
       - name: Fetch wrtbwmon & luci-app-wrtbwmon
         run: |
-          rm -rf temp-smpackage
-          git clone --depth=1 https://github.com/kenzok8/small-package.git temp-smpackage
+          rm -rf temp-jell
+          git clone --depth=1 https://github.com/kenzok8/jell.git temp-jell
           rm -rf wrtbwmon luci-app-wrtbwmon
-          rsync -a --delete temp-smpackage/wrtbwmon/           wrtbwmon/
-          rsync -a --delete temp-smpackage/luci-app-wrtbwmon/ luci-app-wrtbwmon/
-          rm -rf temp-smpackage
+          rsync -a --delete temp-jell/wrtbwmon/            wrtbwmon/
+          rsync -a --delete temp-jell/luci-app-wrtbwmon/ luci-app-wrtbwmon/
+          rm -rf temp-jell
 
       # ---------- Commit & Push ----------
       - name: Commit & push changes
