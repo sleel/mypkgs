@@ -32,7 +32,7 @@ jobs:
           sudo apt-get install -y build-essential gawk gettext file unzip bzip2 wget python3 perl
 
       # ------------------------------------------------------------
-      # msd_lite (框架跟 ImmortalWrt、源码跟 upstream)
+      # msd_lite (双源同步 + 究极强校验)
       # ------------------------------------------------------------
       - name: Update msd_lite
         shell: bash
@@ -43,7 +43,7 @@ jobs:
           PACKAGE_DIR="msd_lite"
           MAKEFILE="${PACKAGE_DIR}/Makefile"
 
-          # 1. 同步 ImmortalWrt 最新的打包框架
+          # 1. 同步 ImmortalWrt 最新的打包框架 (获取最新的 init.d 和 编译参数)
           echo "Syncing base package framework from immortalwrt..."
           rm -rf temp-pkgs
           git clone --depth=1 https://github.com/immortalwrt/packages.git temp-pkgs
@@ -61,7 +61,7 @@ jobs:
             exit 1
           fi
 
-          # [防护增强 2] 确保 Makefile 中只有一个 PKG_SOURCE_VERSION
+          # [防护增强 2] 确保 Makefile 中只有一个 PKG_SOURCE_VERSION，防止 sed 误杀
           SOURCE_VERSION_COUNT="$(grep -c '^PKG_SOURCE_VERSION:=' "$MAKEFILE" || true)"
           if [ "$SOURCE_VERSION_COUNT" -ne 1 ]; then
             echo "ERROR: Expected exactly one PKG_SOURCE_VERSION, found $SOURCE_VERSION_COUNT"
@@ -84,12 +84,12 @@ jobs:
 
           if [ "$CURRENT_COMMIT" = "$LATEST_COMMIT" ]; then
             echo "msd_lite is already up to date with upstream."
-            exit 0 # 退出当前 step，继续后续插件的同步
+            exit 0
           fi
 
           echo "msd_lite has a new upstream commit. Proceeding with update..."
 
-          # 3. 获取源码的日期
+          # 3. 获取源码的日期 (无需全量 clone)
           git clone --filter=blob:none --no-checkout "$REPO" temp-msd-lite
           cd temp-msd-lite
           git checkout --quiet "$LATEST_COMMIT"
@@ -104,6 +104,11 @@ jobs:
           cp -a "$PACKAGE_DIR"/. temp-openwrt/package/mypkgs/msd_lite/
 
           cd temp-openwrt
+
+          # 为 CI 创建非交互式最小 OpenWrt 配置。
+          # 这里只用于 package download/check，不需要选择具体硬件目标。
+          touch .config
+          make defconfig
 
           # 修改 Makefile 为最新的 commit 和 date
           sed -i "s/^PKG_SOURCE_DATE:=.*/PKG_SOURCE_DATE:=${SOURCE_DATE}/" package/mypkgs/msd_lite/Makefile
