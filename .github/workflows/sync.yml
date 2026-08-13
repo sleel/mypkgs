@@ -40,15 +40,15 @@ jobs:
           rsync -a --delete temp-luci/applications/luci-app-msd_lite/ luci-app-msd_lite/
           rm -rf temp-luci
 
-      # ---------- wrtbwmon & luci-app-wrtbwmon (from kenzok8/jell) ----------
+      # ---------- wrtbwmon & luci-app-wrtbwmon (from kenzok8/small-package) ----------
       - name: Fetch wrtbwmon & luci-app-wrtbwmon
         run: |
-          rm -rf temp-jell
-          git clone --depth=1 https://github.com/kenzok8/jell.git temp-jell
+          rm -rf temp-small-package
+          git clone --depth=1 https://github.com/kenzok8/small-package.git temp-small-package
           rm -rf wrtbwmon luci-app-wrtbwmon
-          rsync -a --delete temp-jell/wrtbwmon/            wrtbwmon/
-          rsync -a --delete temp-jell/luci-app-wrtbwmon/ luci-app-wrtbwmon/
-          rm -rf temp-jell
+          rsync -a --delete temp-small-package/wrtbwmon/            wrtbwmon/
+          rsync -a --delete temp-small-package/luci-app-wrtbwmon/ luci-app-wrtbwmon/
+          rm -rf temp-small-package
 
       # ---------- Commit & Push ----------
       - name: Commit & push changes
