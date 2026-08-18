@@ -3,7 +3,10 @@ name: Sync mypkgs
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 */5 * *'  # 每5天执行一次同步检查
+    # 注意：cron 的 day-of-month 字段 */5 并非严格等间隔的“每5天”，
+    # 跨月边界会有偏差（例如 1,6,11,16,21,26,31 号触发）。
+    # 如需严格等间隔，请在脚本内部用日期判断决定是否跳过执行。
+    - cron: '0 0 */5 * *'
 
 # 防止手动触发和定时触发同时运行，导致 push 冲突或 rsync 竞态
 concurrency:
@@ -35,7 +38,7 @@ jobs:
           sudo apt-get install -y \
             build-essential gawk gettext file unzip bzip2 wget python3 perl \
             libncurses-dev libssl-dev zlib1g-dev rsync python3-setuptools \
-            python3-distutils swig curl git
+            swig curl git
 
       # ---------- 同步 msd_lite (框架从 immortalwrt, 源码从 upstream) ----------
       - name: Update msd_lite
