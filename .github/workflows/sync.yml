@@ -5,18 +5,23 @@ on:
   schedule:
     - cron: '0 0 */5 * *'  # 每5天执行一次同步检查
 
+# 防止手动触发和定时触发同时运行，导致 push 冲突或 rsync 竞态
+concurrency:
+  group: sync-mypkgs
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout target repo
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set git identity
         run: |
@@ -27,7 +32,10 @@ jobs:
       - name: Install OpenWrt Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential gawk gettext file unzip bzip2 wget python3 perl
+          sudo apt-get install -y \
+            build-essential gawk gettext file unzip bzip2 wget python3 perl \
+            libncurses-dev libssl-dev zlib1g-dev rsync python3-setuptools \
+            python3-distutils swig curl git
 
       # ---------- 同步 msd_lite (框架从 immortalwrt, 源码从 upstream) ----------
       - name: Update msd_lite
@@ -42,6 +50,12 @@ jobs:
           # 1. 拉取 ImmortalWrt 最新打包框架
           rm -rf temp-pkgs
           git clone --depth=1 https://github.com/immortalwrt/packages.git temp-pkgs
+
+          if [ ! -d "temp-pkgs/net/msd_lite" ]; then
+            echo "ERROR: temp-pkgs/net/msd_lite not found, aborting to avoid wiping local package"
+            exit 1
+          fi
+
           rm -rf msd_lite
           rsync -a --delete temp-pkgs/net/msd_lite/ msd_lite/
           rm -rf temp-pkgs
@@ -68,13 +82,14 @@ jobs:
           fi
 
           CURRENT_COMMIT="$(sed -n 's/^PKG_SOURCE_VERSION:=//p' "$MAKEFILE")"
-          
+
           if [ "$CURRENT_COMMIT" = "$LATEST_COMMIT" ]; then
             echo "msd_lite is already up to date."
-            exit 0  # 无源码更新，跳过后续 hash 计算，但继续同步其他包
+            exit 0 # 无源码更新，跳过后续 hash 计算，但继续同步其他包
           fi
 
           # 3. 获取最新 commit 的日期
+          rm -rf temp-msd-lite
           git clone --filter=blob:none --no-checkout "$REPO" temp-msd-lite
           cd temp-msd-lite
           git checkout --quiet "$LATEST_COMMIT"
@@ -83,6 +98,7 @@ jobs:
           rm -rf temp-msd-lite
 
           # 4. 借助 OpenWrt 原生环境生成 PKG_MIRROR_HASH
+          rm -rf temp-openwrt
           git clone --depth=1 https://github.com/openwrt/openwrt.git temp-openwrt
           mkdir -p temp-openwrt/package/mypkgs/msd_lite
           cp -a "$PACKAGE_DIR"/. temp-openwrt/package/mypkgs/msd_lite/
@@ -117,9 +133,15 @@ jobs:
       # ---------- 同步 luci-app-msd_lite ----------
       - name: Fetch luci-app-msd_lite
         run: |
-          set -e
+          set -euo pipefail
           rm -rf temp-luci
           git clone --depth=1 https://github.com/immortalwrt/luci.git temp-luci
+
+          if [ ! -d "temp-luci/applications/luci-app-msd_lite" ]; then
+            echo "ERROR: temp-luci/applications/luci-app-msd_lite not found, aborting to avoid wiping local package"
+            exit 1
+          fi
+
           rm -rf luci-app-msd_lite
           rsync -a --delete temp-luci/applications/luci-app-msd_lite/ luci-app-msd_lite/
           rm -rf temp-luci
@@ -127,9 +149,15 @@ jobs:
       # ---------- 同步 wrtbwmon & luci-app-wrtbwmon ----------
       - name: Fetch wrtbwmon & luci-app-wrtbwmon
         run: |
-          set -e
+          set -euo pipefail
           rm -rf temp-small-package
           git clone --depth=1 https://github.com/kenzok8/small-package.git temp-small-package
+
+          if [ ! -d "temp-small-package/wrtbwmon" ] || [ ! -d "temp-small-package/luci-app-wrtbwmon" ]; then
+            echo "ERROR: expected source dirs not found in small-package repo, aborting to avoid wiping local packages"
+            exit 1
+          fi
+
           rm -rf wrtbwmon luci-app-wrtbwmon
           rsync -a --delete temp-small-package/wrtbwmon/ wrtbwmon/
           rsync -a --delete temp-small-package/luci-app-wrtbwmon/ luci-app-wrtbwmon/
@@ -138,7 +166,7 @@ jobs:
       # ---------- 提交并推送更改 ----------
       - name: Commit & push changes
         run: |
-          set -e
+          set -euo pipefail
           git add msd_lite luci-app-msd_lite wrtbwmon luci-app-wrtbwmon
 
           if git diff --cached --quiet; then
@@ -147,4 +175,7 @@ jobs:
           fi
 
           git commit -m "Sync mypkgs: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+
+          # 使用当前实际分支名，避免硬编码 main 导致推送到错误分支
+          BRANCH="${GITHUB_REF_NAME}"
+          git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "HEAD:${BRANCH}"
